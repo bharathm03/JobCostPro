@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -13,31 +20,37 @@ import {
 import { ClipboardList, IndianRupee, Users, Trash2 } from 'lucide-react'
 import { useNavigation } from '@/stores/navigation'
 import { formatINR, formatDate } from '@/lib/format'
+import { type DateRangeKey, getDateRange } from '@/lib/date-ranges'
 import type { DashboardStats } from '@/types/models'
 
 export function DashboardPage() {
   const { navigate } = useNavigation()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [rangeKey, setRangeKey] = useState<DateRangeKey>('this-month')
 
-  useEffect(() => {
-    loadStats()
-  }, [])
+  const range = getDateRange(rangeKey)
 
-  async function loadStats() {
+  const loadStats = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await window.api.dashboard.getStats()
+      const data = await window.api.dashboard.getStats(range.from, range.to)
       setStats(data)
     } catch (err) {
       console.error('Failed to load dashboard stats:', err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [range.from, range.to])
 
-  const now = new Date()
-  const monthYear = now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+  useEffect(() => {
+    loadStats()
+  }, [loadStats])
+
+  const rangeLabel =
+    rangeKey === 'today'
+      ? formatDate(range.from)
+      : `${formatDate(range.from)} – ${formatDate(range.to)}`
 
   if (loading) {
     return (
@@ -52,9 +65,23 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-muted-foreground">Overview for {monthYear}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <p className="text-muted-foreground">{rangeLabel}</p>
+        </div>
+        <Select value={rangeKey} onValueChange={(v) => setRangeKey(v as DateRangeKey)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="this-week">This Week</SelectItem>
+            <SelectItem value="this-month">This Month</SelectItem>
+            <SelectItem value="last-week">Last Week</SelectItem>
+            <SelectItem value="last-month">Last Month</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Summary Cards */}
@@ -66,7 +93,7 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.totalJobs ?? 0}</div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-muted-foreground">{range.label}</p>
           </CardContent>
         </Card>
 
@@ -77,7 +104,7 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatINR(stats?.totalRevenue ?? 0)}</div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-muted-foreground">{range.label}</p>
           </CardContent>
         </Card>
 
@@ -88,7 +115,7 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatINR(stats?.totalCooly ?? 0)}</div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-muted-foreground">{range.label}</p>
           </CardContent>
         </Card>
 
@@ -99,7 +126,7 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatINR(stats?.totalWaste ?? 0)}</div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-muted-foreground">{range.label}</p>
           </CardContent>
         </Card>
       </div>
@@ -130,11 +157,21 @@ export function DashboardPage() {
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <TableBody onKeyDown={(e) => {
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                  const rows = Array.from((e.currentTarget as HTMLElement).querySelectorAll('tr[tabindex]'))
+                  const idx = rows.indexOf(e.target as Element)
+                  if (idx === -1) return
+                  e.preventDefault()
+                  const next = e.key === 'ArrowDown' ? rows[idx + 1] : rows[idx - 1]
+                  ;(next as HTMLElement)?.focus()
+                }
+              }}>
                 {stats.recentJobs.map((job) => (
                   <TableRow
                     key={job.id}
-                    className="cursor-pointer hover:bg-muted/50"
+                    interactive
+                    aria-label={`Job ${job.jobNumber} - ${job.customerName ?? 'No customer'}`}
                     onClick={() => navigate('job-form', { jobId: job.id })}
                   >
                     <TableCell>{formatDate(job.date)}</TableCell>
@@ -160,7 +197,7 @@ export function DashboardPage() {
               </TableBody>
             </Table>
           ) : (
-            <p className="text-sm text-muted-foreground">No recent jobs found.</p>
+            <p className="text-sm text-muted-foreground">No jobs found for this period.</p>
           )}
         </CardContent>
       </Card>

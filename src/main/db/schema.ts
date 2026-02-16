@@ -28,8 +28,19 @@ export const items = sqliteTable('items', {
 export const machineTypes = sqliteTable('machine_types', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
+  model: text('model'),
   description: text('description'),
   customFieldsSchema: text('custom_fields_schema').notNull() // JSON
+})
+
+export const employees = sqliteTable('employees', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  phone: text('phone'),
+  machineTypeId: integer('machine_type_id').references(() => machineTypes.id),
+  createdAt: text('created_at')
+    .notNull()
+    .default(sql`(datetime('now'))`)
 })
 
 export const jobs = sqliteTable('jobs', {
@@ -39,6 +50,7 @@ export const jobs = sqliteTable('jobs', {
   customerId: integer('customer_id')
     .notNull()
     .references(() => customers.id),
+  employeeId: integer('employee_id').references(() => employees.id),
   itemId: integer('item_id')
     .notNull()
     .references(() => items.id),
@@ -49,6 +61,11 @@ export const jobs = sqliteTable('jobs', {
   wasteAmount: real('waste_amount').notNull().default(0),
   cooly: real('cooly').notNull().default(0),
   totalAmount: real('total_amount').notNull().default(0),
+  machineTypeId: integer('machine_type_id').references(() => machineTypes.id),
+  machineCustomData: text('machine_custom_data').notNull().default('{}'),
+  machineCost: real('machine_cost').notNull().default(0),
+  machineWastePercentage: real('machine_waste_percentage').notNull().default(0),
+  machineWasteAmount: real('machine_waste_amount').notNull().default(0),
   notes: text('notes'),
   status: text('status').notNull().default('draft'),
   createdAt: text('created_at')
@@ -57,20 +74,6 @@ export const jobs = sqliteTable('jobs', {
   updatedAt: text('updated_at')
     .notNull()
     .default(sql`(datetime('now'))`)
-})
-
-export const jobMachineEntries = sqliteTable('job_machine_entries', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  jobId: integer('job_id')
-    .notNull()
-    .references(() => jobs.id, { onDelete: 'cascade' }),
-  machineTypeId: integer('machine_type_id')
-    .notNull()
-    .references(() => machineTypes.id),
-  machineCustomData: text('machine_custom_data').notNull().default('{}'), // JSON
-  cost: real('cost').notNull().default(0),
-  wastePercentage: real('waste_percentage').notNull().default(0),
-  wasteAmount: real('waste_amount').notNull().default(0)
 })
 
 export const meta = sqliteTable('meta', {

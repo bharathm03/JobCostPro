@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import {
   CalendarIcon,
   Check,
   ChevronsUpDown,
-  Plus,
   PlusCircle
 } from 'lucide-react'
 
@@ -14,15 +13,17 @@ import { useCustomerStore } from '@/stores/customers'
 import { useItemStore } from '@/stores/items'
 import { useJobStore } from '@/stores/jobs'
 import { useMachineStore } from '@/stores/machines'
+import { useEmployeeStore } from '@/stores/employees'
 
 import { useJobCostCalculator, type JobFormCostData } from '@/hooks/useJobCostCalculator'
 import { formatINR } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import type { MachineFieldSchema } from '@/types/models'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
@@ -49,15 +50,9 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
 
-import { MachineEntryCard, type MachineEntryData } from '@/components/job/MachineEntryCard'
+import { DynamicField } from '@/components/job/DynamicField'
 import { CostSummary } from '@/components/job/CostSummary'
 import { AutoFillSuggestion } from '@/components/job/AutoFillSuggestion'
 
@@ -66,13 +61,18 @@ import { AutoFillSuggestion } from '@/components/job/AutoFillSuggestion'
 interface FormState {
   date: Date
   customerId: number | null
+  employeeId: number | null
   itemId: number | null
   categoryId: number | null
   quantity: number
   rate: number
   wastePercentage: number
   cooly: number
-  machineEntries: MachineEntryData[]
+  machineTypeId: number | null
+  machineCustomData: Record<string, unknown>
+  machineCost: number
+  machineWastePercentage: number
+  machineWasteAmount: number
   notes: string
   status: string
 }
@@ -80,13 +80,18 @@ interface FormState {
 const DEFAULT_FORM: FormState = {
   date: new Date(),
   customerId: null,
+  employeeId: null,
   itemId: null,
   categoryId: null,
   quantity: 0,
   rate: 0,
   wastePercentage: 0,
   cooly: 0,
-  machineEntries: [],
+  machineTypeId: null,
+  machineCustomData: {},
+  machineCost: 0,
+  machineWastePercentage: 0,
+  machineWasteAmount: 0,
   notes: '',
   status: 'pending'
 }
@@ -97,12 +102,15 @@ export function JobFormPage() {
   const { pageParams, navigate } = useNavigation()
   const jobId = pageParams.jobId as number | undefined
   const isEditMode = jobId != null
+  const formRef = useRef<HTMLFormElement>(null)
+  const handleSaveRef = useRef<() => void>(() => {})
 
   // Stores
   const { customers, fetchCustomers, createCustomer } = useCustomerStore()
   const { items, categories, fetchItems, fetchCategories, getItemsByCategory } = useItemStore()
   const { createJob, updateJob } = useJobStore()
   const { machines, fetchMachines } = useMachineStore()
+  const { employees, fetchEmployees } = useEmployeeStore()
 
   // Form state
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
@@ -127,7 +135,8 @@ export function JobFormPage() {
     fetchItems()
     fetchCategories()
     fetchMachines()
-  }, [fetchCustomers, fetchItems, fetchCategories, fetchMachines])
+    fetchEmployees()
+  }, [fetchCustomers, fetchItems, fetchCategories, fetchMachines, fetchEmployees])
 
   // Load existing job if editing
   useEffect(() => {
@@ -135,40 +144,32 @@ export function JobFormPage() {
 
     async function loadJob() {
       try {
-        const job = await window.api.jobs.getById(jobId!)
+        const allJobs = await window.api.jobs.list()
+        const job = allJobs.find((j) => j.id === jobId)
         if (!job) return
 
-        // Find category from item
         const item = items.find((i) => i.id === job.itemId)
 
         setForm({
           date: new Date(job.date),
           customerId: job.customerId,
+          employeeId: job.employeeId ?? null,
           itemId: job.itemId,
           categoryId: item?.categoryId ?? null,
           quantity: job.quantity,
           rate: job.rate,
           wastePercentage: job.wastePercentage,
           cooly: job.cooly,
+          machineTypeId: job.machineTypeId ?? null,
+          machineCustomData: job.machineCustomData
+            ? JSON.parse(typeof job.machineCustomData === 'string' ? job.machineCustomData : '{}')
+            : {},
+          machineCost: job.machineCost ?? 0,
+          machineWastePercentage: job.machineWastePercentage ?? 0,
+          machineWasteAmount: job.machineWasteAmount ?? 0,
           notes: job.notes ?? '',
-          status: job.status,
-          machineEntries: []
+          status: job.status
         })
-
-        // Load machine entries
-        const entries = await window.api.jobs.getMachineEntries(jobId!)
-        if (entries && entries.length > 0) {
-          setForm((prev) => ({
-            ...prev,
-            machineEntries: entries.map((e: { machineTypeId: number; machineCustomData: string; cost: number; wastePercentage: number; wasteAmount: number }) => ({
-              machineTypeId: e.machineTypeId,
-              machineCustomData: JSON.parse(e.machineCustomData || '{}'),
-              cost: e.cost,
-              wastePercentage: e.wastePercentage,
-              wasteAmount: e.wasteAmount
-            }))
-          }))
-        }
       } catch (err) {
         toast.error('Failed to load job data')
         console.error(err)
@@ -194,22 +195,20 @@ export function JobFormPage() {
             rate: result.rate ?? prev.rate,
             wastePercentage: result.wastePercentage ?? prev.wastePercentage,
             cooly: result.cooly ?? prev.cooly,
-            machineEntries: result.machineEntries
-              ? result.machineEntries.map((e: { machineTypeId: number; machineCustomData: string; cost: number; wastePercentage: number; wasteAmount: number }) => ({
-                  machineTypeId: e.machineTypeId,
-                  machineCustomData: JSON.parse(
-                    typeof e.machineCustomData === 'string' ? e.machineCustomData : '{}'
-                  ),
-                  cost: e.cost,
-                  wastePercentage: e.wastePercentage,
-                  wasteAmount: e.wasteAmount
-                }))
-              : prev.machineEntries
+            machineTypeId: result.machineTypeId ?? prev.machineTypeId,
+            machineCustomData: result.machineCustomData
+              ? JSON.parse(
+                  typeof result.machineCustomData === 'string' ? result.machineCustomData : '{}'
+                )
+              : prev.machineCustomData,
+            machineCost: result.machineCost ?? prev.machineCost,
+            machineWastePercentage: result.machineWastePercentage ?? prev.machineWastePercentage,
+            machineWasteAmount: result.machineWasteAmount ?? prev.machineWasteAmount
           }))
           setAutoFillJobNumber(result.jobNumber ?? null)
         }
       } catch {
-        // No auto-fill data available, that's fine
+        // No auto-fill data available
       }
     }
 
@@ -223,15 +222,62 @@ export function JobFormPage() {
   const baseAmount = form.quantity * form.rate
   const wasteAmount = baseAmount * (form.wastePercentage / 100)
 
+  // Selected machine type & schema
+  const selectedMachine = machines.find((m) => m.id === form.machineTypeId)
+  const machineSchema: MachineFieldSchema[] = selectedMachine
+    ? (() => {
+        try {
+          return JSON.parse(selectedMachine.customFieldsSchema) as MachineFieldSchema[]
+        } catch {
+          return []
+        }
+      })()
+    : []
+
   // Cost calculator
   const costData: JobFormCostData = {
     quantity: form.quantity,
     rate: form.rate,
     wastePercentage: form.wastePercentage,
     cooly: form.cooly,
-    machineEntries: form.machineEntries
+    machineTypeId: form.machineTypeId,
+    machineCost: form.machineCost,
+    machineWasteAmount: form.machineWasteAmount
   }
   const costBreakdown = useJobCostCalculator(costData, machines)
+
+  // ---------- Focus / keyboard navigation ----------
+
+  const advanceToNextField = useCallback((currentEl?: HTMLElement) => {
+    const formEl = formRef.current
+    if (!formEl) return
+    const focusable = Array.from(
+      formEl.querySelectorAll<HTMLElement>(
+        'input:not([disabled]):not([readonly]), textarea:not([disabled]), button[role="combobox"], [data-field-trigger]'
+      )
+    )
+    if (!currentEl) {
+      // If no current element, try to advance from document.activeElement
+      currentEl = document.activeElement as HTMLElement
+    }
+    const idx = focusable.indexOf(currentEl)
+    if (idx >= 0 && idx < focusable.length - 1) {
+      focusable[idx + 1].focus()
+    }
+  }, [])
+
+  // Auto-focus customer combobox on mount (new job only)
+  useEffect(() => {
+    if (isEditMode) return
+    // Wait for data to load, then focus
+    const timer = setTimeout(() => {
+      const formEl = formRef.current
+      if (!formEl) return
+      const customerBtn = formEl.querySelector<HTMLElement>('button[role="combobox"]')
+      customerBtn?.focus()
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [isEditMode])
 
   // Handlers
   const updateForm = useCallback(
@@ -250,31 +296,41 @@ export function JobFormPage() {
     updateForm('itemId', Number(itemId))
   }
 
-  const handleAddMachine = (machineTypeId: number) => {
-    const newEntry: MachineEntryData = {
-      machineTypeId,
-      machineCustomData: {},
-      cost: 0,
-      wastePercentage: 0,
-      wasteAmount: 0
+  const handleMachineChange = (val: string) => {
+    if (val === 'none') {
+      setForm((prev) => ({
+        ...prev,
+        machineTypeId: null,
+        machineCustomData: {},
+        machineCost: 0,
+        machineWastePercentage: 0,
+        machineWasteAmount: 0
+      }))
+    } else {
+      setForm((prev) => ({
+        ...prev,
+        machineTypeId: Number(val),
+        machineCustomData: {},
+        machineCost: 0,
+        machineWastePercentage: 0,
+        machineWasteAmount: 0
+      }))
     }
+  }
+
+  const handleMachineCustomDataChange = (name: string, value: unknown) => {
     setForm((prev) => ({
       ...prev,
-      machineEntries: [...prev.machineEntries, newEntry]
+      machineCustomData: { ...prev.machineCustomData, [name]: value }
     }))
   }
 
-  const handleMachineEntryChange = (index: number, updated: MachineEntryData) => {
+  const handleMachineWastePercentageChange = (wastePercentage: number) => {
+    const machineWasteAmount = form.machineCost * (wastePercentage / 100)
     setForm((prev) => ({
       ...prev,
-      machineEntries: prev.machineEntries.map((e, i) => (i === index ? updated : e))
-    }))
-  }
-
-  const handleRemoveMachineEntry = (index: number) => {
-    setForm((prev) => ({
-      ...prev,
-      machineEntries: prev.machineEntries.filter((_, i) => i !== index)
+      machineWastePercentage: wastePercentage,
+      machineWasteAmount: Math.round(machineWasteAmount * 100) / 100
     }))
   }
 
@@ -301,7 +357,20 @@ export function JobFormPage() {
   }
 
   const handleSave = async () => {
-    // Basic validation
+    // Date must be within one week of today
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const oneWeekAgo = new Date(today)
+    oneWeekAgo.setDate(today.getDate() - 7)
+    const oneWeekAhead = new Date(today)
+    oneWeekAhead.setDate(today.getDate() + 7)
+    const jobDate = new Date(form.date)
+    jobDate.setHours(0, 0, 0, 0)
+    if (jobDate < oneWeekAgo || jobDate > oneWeekAhead) {
+      toast.error('Job date must be within one week of today')
+      return
+    }
+
     if (!form.customerId) {
       toast.error('Please select a customer')
       return
@@ -324,6 +393,7 @@ export function JobFormPage() {
       const jobData = {
         date: format(form.date, 'yyyy-MM-dd'),
         customerId: form.customerId,
+        employeeId: form.employeeId,
         itemId: form.itemId,
         quantity: form.quantity,
         rate: form.rate,
@@ -332,31 +402,20 @@ export function JobFormPage() {
         wasteAmount: wasteAmount,
         cooly: form.cooly,
         totalAmount: costBreakdown.grandTotal,
+        machineTypeId: form.machineTypeId,
+        machineCustomData: JSON.stringify(form.machineCustomData),
+        machineCost: form.machineCost,
+        machineWastePercentage: form.machineWastePercentage,
+        machineWasteAmount: form.machineWasteAmount,
         notes: form.notes || null,
         status: form.status
       }
 
-      const machineEntriesData = form.machineEntries.map((e) => ({
-        machineTypeId: e.machineTypeId,
-        machineCustomData: JSON.stringify(e.machineCustomData),
-        cost: e.cost,
-        wastePercentage: e.wastePercentage,
-        wasteAmount: e.wasteAmount
-      }))
-
       if (isEditMode && jobId) {
         await updateJob(jobId, jobData)
-        // Update machine entries
-        if (window.api.jobs.updateMachineEntries) {
-          await window.api.jobs.updateMachineEntries(jobId, machineEntriesData)
-        }
         toast.success('Job updated successfully')
       } else {
         const job = await createJob(jobData as any)
-        // Create machine entries
-        if (window.api.jobs.createMachineEntries && machineEntriesData.length > 0) {
-          await window.api.jobs.createMachineEntries(job.id, machineEntriesData)
-        }
         toast.success(`Job ${job.jobNumber} created successfully`)
       }
 
@@ -369,20 +428,78 @@ export function JobFormPage() {
     }
   }
 
+  handleSaveRef.current = handleSave
+
   const handleCancel = () => {
     navigate('jobs')
   }
 
+  // Auto-select text on focus for number inputs
+  const selectOnFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+    e.target.select()
+  }, [])
+
+  // Enter-to-advance for inputs
+  const handleFieldKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key !== 'Enter') return
+      e.preventDefault()
+      advanceToNextField(e.currentTarget)
+    },
+    [advanceToNextField]
+  )
+
+  // Auto-advance helper for Select onValueChange (finds trigger, then advances)
+  const advanceFromTrigger = useCallback(
+    (triggerId?: string) => {
+      setTimeout(() => {
+        const formEl = formRef.current
+        if (!formEl) return
+        let triggerEl: HTMLElement | null = null
+        if (triggerId) {
+          triggerEl = formEl.querySelector<HTMLElement>(`#${triggerId}`)
+        }
+        if (!triggerEl) {
+          triggerEl = document.activeElement as HTMLElement
+        }
+        advanceToNextField(triggerEl)
+      }, 0)
+    },
+    [advanceToNextField]
+  )
+
+  // Ctrl+S to save, Escape to go back
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSaveRef.current()
+      }
+      if (e.key === 'Escape') {
+        navigate('jobs')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [navigate])
+
   return (
-    <div className="space-y-6">
+    <form
+      ref={formRef}
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault()
+        handleSave()
+      }}
+    >
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-semibold">
           {isEditMode ? 'Edit Job' : 'New Job'}
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {isEditMode
-            ? `Editing job #${jobId}. Update job details and machine entries.`
+            ? `Editing job #${jobId}. Update job details.`
             : 'Create a new production job with costing details.'}
         </p>
       </div>
@@ -395,20 +512,20 @@ export function JobFormPage() {
         />
       )}
 
-      {/* Section 1 - Date & Customer */}
+      {/* ===== Section 1: Job Details ===== */}
       <Card>
-        <CardHeader>
-          <CardTitle>Date & Customer</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <CardContent className="pt-4 space-y-3">
+          {/* Row 1: Date | Customer | Employee */}
+          <h3 className="text-sm font-medium text-muted-foreground">Date & Customer</h3>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-3">
             {/* Date Picker */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Date</Label>
               <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
+                    data-field-trigger
                     className={cn(
                       'w-full justify-start text-left font-normal',
                       !form.date && 'text-muted-foreground'
@@ -426,6 +543,13 @@ export function JobFormPage() {
                       if (date) {
                         updateForm('date', date)
                         setDatePopoverOpen(false)
+                        // Advance to customer combobox after date selection
+                        setTimeout(() => {
+                          const formEl = formRef.current
+                          if (!formEl) return
+                          const dateTrigger = formEl.querySelector<HTMLElement>('[data-field-trigger]')
+                          if (dateTrigger) advanceToNextField(dateTrigger)
+                        }, 0)
                       }
                     }}
                     initialFocus
@@ -435,7 +559,7 @@ export function JobFormPage() {
             </div>
 
             {/* Customer Combobox */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Customer</Label>
               <Popover open={customerComboOpen} onOpenChange={setCustomerComboOpen}>
                 <PopoverTrigger asChild>
@@ -462,6 +586,13 @@ export function JobFormPage() {
                             onSelect={() => {
                               updateForm('customerId', customer.id)
                               setCustomerComboOpen(false)
+                              // Advance to employee after customer selection
+                              setTimeout(() => {
+                                const formEl = formRef.current
+                                if (!formEl) return
+                                const customerBtn = formEl.querySelector<HTMLElement>('button[role="combobox"]')
+                                if (customerBtn) advanceToNextField(customerBtn)
+                              }, 0)
                             }}
                           >
                             <Check
@@ -496,25 +627,48 @@ export function JobFormPage() {
                 </PopoverContent>
               </Popover>
             </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Section 2 - Item Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Item Selection</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            {/* Employee Select */}
+            <div className="space-y-1">
+              <Label>Employee</Label>
+              <Select
+                value={form.employeeId ? String(form.employeeId) : ''}
+                onValueChange={(val) => {
+                  updateForm('employeeId', val ? Number(val) : null)
+                  advanceFromTrigger('employee-trigger')
+                }}
+              >
+                <SelectTrigger id="employee-trigger" className="w-full" data-field-trigger>
+                  <SelectValue placeholder="Select employee..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={String(emp.id)}>
+                      {emp.name}
+                      {emp.machineTypeName ? ` (${emp.machineTypeName})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Row 2: Category | Item | Size */}
+          <h3 className="text-sm font-medium text-muted-foreground">Item Selection</h3>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-3">
             {/* Category */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Category</Label>
               <Select
                 value={form.categoryId ? String(form.categoryId) : ''}
-                onValueChange={handleCategoryChange}
+                onValueChange={(val) => {
+                  handleCategoryChange(val)
+                  advanceFromTrigger('category-trigger')
+                }}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="category-trigger" className="w-full" data-field-trigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -528,13 +682,16 @@ export function JobFormPage() {
             </div>
 
             {/* Item */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Item</Label>
               <Select
                 value={form.itemId ? String(form.itemId) : ''}
-                onValueChange={handleItemChange}
+                onValueChange={(val) => {
+                  handleItemChange(val)
+                  advanceFromTrigger('item-trigger')
+                }}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="item-trigger" className="w-full" data-field-trigger>
                   <SelectValue placeholder="Select item" />
                 </SelectTrigger>
                 <SelectContent>
@@ -548,25 +705,20 @@ export function JobFormPage() {
             </div>
 
             {/* Size (read-only) */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Size</Label>
               <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm">
                 {selectedItem?.size || 'Select an item first'}
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Section 3 - Quantity, Rate & Costs */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quantity, Rate & Costs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Quantity */}
-            <div className="space-y-2">
+          <Separator />
+
+          {/* Row 3: Quantity | Rate | Amount */}
+          <h3 className="text-sm font-medium text-muted-foreground">Quantity & Rate</h3>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-3">
+            <div className="space-y-1">
               <Label htmlFor="quantity">Quantity</Label>
               <Input
                 id="quantity"
@@ -574,12 +726,12 @@ export function JobFormPage() {
                 min={0}
                 value={form.quantity || ''}
                 onChange={(e) => updateForm('quantity', Number(e.target.value) || 0)}
+                onKeyDown={handleFieldKeyDown}
+                onFocus={selectOnFocus}
                 placeholder="0"
               />
             </div>
-
-            {/* Rate */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="rate">Rate (per unit)</Label>
               <Input
                 id="rate"
@@ -588,20 +740,22 @@ export function JobFormPage() {
                 step="0.01"
                 value={form.rate || ''}
                 onChange={(e) => updateForm('rate', Number(e.target.value) || 0)}
+                onKeyDown={handleFieldKeyDown}
+                onFocus={selectOnFocus}
                 placeholder="0.00"
               />
             </div>
-
-            {/* Amount (auto-calculated) */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Amount</Label>
               <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm font-medium">
                 {formatINR(baseAmount)}
               </div>
             </div>
+          </div>
 
-            {/* Cooly */}
-            <div className="space-y-2">
+          {/* Row 4: Cooly | Waste% | Waste Amount */}
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-3">
+            <div className="space-y-1">
               <Label htmlFor="cooly">Cooly (Labor)</Label>
               <Input
                 id="cooly"
@@ -610,12 +764,12 @@ export function JobFormPage() {
                 step="0.01"
                 value={form.cooly || ''}
                 onChange={(e) => updateForm('cooly', Number(e.target.value) || 0)}
+                onKeyDown={handleFieldKeyDown}
+                onFocus={selectOnFocus}
                 placeholder="0.00"
               />
             </div>
-
-            {/* Waste % */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="wastePercentage">Waste %</Label>
               <Input
                 id="wastePercentage"
@@ -625,12 +779,12 @@ export function JobFormPage() {
                 step="0.1"
                 value={form.wastePercentage || ''}
                 onChange={(e) => updateForm('wastePercentage', Number(e.target.value) || 0)}
+                onKeyDown={handleFieldKeyDown}
+                onFocus={selectOnFocus}
                 placeholder="0"
               />
             </div>
-
-            {/* Waste Amount (auto-calculated) */}
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Waste Amount</Label>
               <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm font-medium">
                 {formatINR(wasteAmount)}
@@ -640,115 +794,161 @@ export function JobFormPage() {
         </CardContent>
       </Card>
 
-      {/* Section 4 - Machine Entries */}
+      {/* ===== Section 2: Machine ===== */}
       <Card>
-        <CardHeader>
-          <CardTitle>Machine Entries</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {form.machineEntries.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No machines added yet. Click &quot;Add Machine&quot; to add a machine entry.
-            </p>
-          )}
-
-          {form.machineEntries.map((entry, index) => {
-            const machineType = machines.find((m) => m.id === entry.machineTypeId)
-            if (!machineType) return null
-            return (
-              <MachineEntryCard
-                key={`${entry.machineTypeId}-${index}`}
-                machineType={machineType}
-                entry={entry}
-                onChange={(updated) => handleMachineEntryChange(index, updated)}
-                onRemove={() => handleRemoveMachineEntry(index)}
-              />
-            )
-          })}
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Plus className="mr-2 size-4" />
-                Add Machine
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {machines.length === 0 ? (
-                <DropdownMenuItem disabled>No machine types available</DropdownMenuItem>
-              ) : (
-                machines.map((machine) => (
-                  <DropdownMenuItem
-                    key={machine.id}
-                    onClick={() => handleAddMachine(machine.id)}
-                  >
+        <CardContent className="pt-4 space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Machine</h3>
+          <div className="space-y-1">
+            <Label>Machine Type</Label>
+            <Select
+              value={form.machineTypeId ? String(form.machineTypeId) : 'none'}
+              onValueChange={(val) => {
+                handleMachineChange(val)
+                advanceFromTrigger('machine-trigger')
+              }}
+            >
+              <SelectTrigger id="machine-trigger" className="w-full max-w-sm" data-field-trigger>
+                <SelectValue placeholder="Select machine..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {machines.map((machine) => (
+                  <SelectItem key={machine.id} value={String(machine.id)}>
                     {machine.name}
-                  </DropdownMenuItem>
-                ))
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedMachine && (
+            <>
+              {machineSchema.length > 0 && (
+                <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {machineSchema.map((field) => (
+                    <DynamicField
+                      key={field.name}
+                      field={field}
+                      value={form.machineCustomData[field.name]}
+                      onChange={handleMachineCustomDataChange}
+                      onAdvance={() => advanceFromTrigger()}
+                    />
+                  ))}
+                </div>
               )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+
+              <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <Label htmlFor="machine-cost">Cost</Label>
+                  <Input
+                    id="machine-cost"
+                    type="number"
+                    min={0}
+                    value={form.machineCost || ''}
+                    onChange={(e) => updateForm('machineCost', Number(e.target.value) || 0)}
+                    onKeyDown={handleFieldKeyDown}
+                    onFocus={selectOnFocus}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="machine-waste-pct">Waste %</Label>
+                  <Input
+                    id="machine-waste-pct"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={form.machineWastePercentage || ''}
+                    onChange={(e) =>
+                      handleMachineWastePercentageChange(Number(e.target.value) || 0)
+                    }
+                    onKeyDown={handleFieldKeyDown}
+                    onFocus={selectOnFocus}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Waste Amount</Label>
+                  <Input
+                    type="number"
+                    value={form.machineWasteAmount.toFixed(2)}
+                    readOnly
+                    disabled
+                    className="bg-muted"
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
-      {/* Section 5 - Cost Summary */}
-      <CostSummary breakdown={costBreakdown} />
-
-      {/* Section 6 - Notes & Status */}
+      {/* ===== Section 3: Summary & Finish ===== */}
       <Card>
-        <CardHeader>
-          <CardTitle>Notes & Status</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <textarea
-                id="notes"
-                className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={form.notes}
-                onChange={(e) => updateForm('notes', e.target.value)}
-                placeholder="Optional notes about this job..."
-              />
+        <CardContent className="pt-4 space-y-3">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-2">
+            {/* Left: Cost Summary */}
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">Cost Summary</h3>
+              <CostSummary breakdown={costBreakdown} />
             </div>
 
-            {/* Status */}
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select
-                value={form.status}
-                onValueChange={(val) => updateForm('status', val)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="in-progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Right: Notes + Status + Buttons */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground">Notes & Status</h3>
+              <div className="space-y-1">
+                <Label htmlFor="notes">Notes</Label>
+                <textarea
+                  id="notes"
+                  className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[60px] w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={form.notes}
+                  onChange={(e) => updateForm('notes', e.target.value)}
+                  placeholder="Optional notes about this job..."
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Status</Label>
+                <Select
+                  value={form.status}
+                  onValueChange={(val) => updateForm('status', val)}
+                >
+                  <SelectTrigger className="w-full" data-field-trigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in-progress">In Progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Separator />
+
+              <div className="flex justify-end gap-3">
+                <Button type="button" variant="outline" onClick={handleCancel} disabled={saving}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? 'Saving...' : isEditMode ? 'Update Job' : 'Create Job'}
+                </Button>
+              </div>
             </div>
-          </div>
-
-          <Separator />
-
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={handleCancel} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : isEditMode ? 'Update Job' : 'Create Job'}
-            </Button>
           </div>
         </CardContent>
       </Card>
 
       {/* Customer Quick-Add Dialog */}
       <Dialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen}>
-        <DialogContent>
+        <DialogContent
+          onOpenAutoFocus={(e) => {
+            e.preventDefault()
+            setTimeout(() => {
+              document.getElementById('new-customer-name')?.focus()
+            }, 0)
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Add New Customer</DialogTitle>
             <DialogDescription>
@@ -764,8 +964,13 @@ export function JobFormPage() {
                 id="new-customer-name"
                 value={newCustomerName}
                 onChange={(e) => setNewCustomerName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    document.getElementById('new-customer-phone')?.focus()
+                  }
+                }}
                 placeholder="Customer name"
-                autoFocus
               />
             </div>
             <div className="space-y-2">
@@ -774,6 +979,12 @@ export function JobFormPage() {
                 id="new-customer-phone"
                 value={newCustomerPhone}
                 onChange={(e) => setNewCustomerPhone(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleCustomerQuickAdd()
+                  }
+                }}
                 placeholder="Phone number (optional)"
               />
             </div>
@@ -795,6 +1006,6 @@ export function JobFormPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </form>
   )
 }

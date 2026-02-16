@@ -1,36 +1,23 @@
 import { useMemo } from 'react'
 import type { MachineType } from '@/types/models'
 
-interface MachineEntryData {
-  machineTypeId: number
-  machineCustomData: Record<string, unknown>
-  cost: number
-  wastePercentage: number
-  wasteAmount: number
-}
-
 export interface JobFormCostData {
   quantity: number
   rate: number
   wastePercentage: number
   cooly: number
-  machineEntries: MachineEntryData[]
-}
-
-export interface MachineCostLine {
-  machineTypeId: number
-  machineName: string
-  cost: number
-  wasteAmount: number
+  machineTypeId: number | null
+  machineCost: number
+  machineWasteAmount: number
 }
 
 export interface CostBreakdown {
   baseAmount: number
   coolyAmount: number
   wasteAmount: number
-  machineCosts: MachineCostLine[]
-  totalMachineCost: number
-  totalMachineWaste: number
+  machineName: string | null
+  machineCost: number
+  machineWasteAmount: number
   grandTotal: number
 }
 
@@ -43,29 +30,23 @@ export function useJobCostCalculator(
     const coolyAmount = formData.cooly
     const wasteAmount = baseAmount * (formData.wastePercentage / 100)
 
-    const machineCosts: MachineCostLine[] = formData.machineEntries.map((entry) => {
-      const machine = machineTypes.find((m) => m.id === entry.machineTypeId)
-      return {
-        machineTypeId: entry.machineTypeId,
-        machineName: machine?.name ?? `Machine #${entry.machineTypeId}`,
-        cost: entry.cost,
-        wasteAmount: entry.wasteAmount
-      }
-    })
-
-    const totalMachineCost = machineCosts.reduce((sum, m) => sum + m.cost, 0)
-    const totalMachineWaste = machineCosts.reduce((sum, m) => sum + m.wasteAmount, 0)
+    const machine = formData.machineTypeId
+      ? machineTypes.find((m) => m.id === formData.machineTypeId)
+      : null
+    const machineName = machine?.name ?? null
+    const machineCost = formData.machineCost
+    const machineWasteAmount = formData.machineWasteAmount
 
     const grandTotal =
-      baseAmount + coolyAmount + wasteAmount + totalMachineCost + totalMachineWaste
+      baseAmount + coolyAmount + wasteAmount + machineCost + machineWasteAmount
 
     return {
       baseAmount,
       coolyAmount,
       wasteAmount,
-      machineCosts,
-      totalMachineCost,
-      totalMachineWaste,
+      machineName,
+      machineCost,
+      machineWasteAmount,
       grandTotal
     }
   }, [
@@ -73,7 +54,9 @@ export function useJobCostCalculator(
     formData.rate,
     formData.wastePercentage,
     formData.cooly,
-    formData.machineEntries,
+    formData.machineTypeId,
+    formData.machineCost,
+    formData.machineWasteAmount,
     machineTypes
   ])
 }

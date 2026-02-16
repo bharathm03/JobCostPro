@@ -1,11 +1,11 @@
 import type {
   Customer,
+  Employee,
   ItemCategory,
   Item,
   MachineType,
   MachineFieldSchema,
   Job,
-  JobMachineEntry,
   JobFilters,
   DashboardStats
 } from './models'
@@ -18,6 +18,12 @@ declare global {
         list(): Promise<Customer[]>
         create(data: Omit<Customer, 'id' | 'createdAt'>): Promise<Customer>
         update(id: number, data: Partial<Omit<Customer, 'id' | 'createdAt'>>): Promise<Customer>
+        delete(id: number): Promise<void>
+      }
+      employees: {
+        list(): Promise<Employee[]>
+        create(data: Omit<Employee, 'id' | 'createdAt' | 'machineTypeName'>): Promise<Employee>
+        update(id: number, data: Partial<Omit<Employee, 'id' | 'createdAt' | 'machineTypeName'>>): Promise<Employee>
         delete(id: number): Promise<void>
       }
       categories: {
@@ -36,57 +42,48 @@ declare global {
       }
       jobs: {
         list(filters?: JobFilters): Promise<Job[]>
-        create(data: {
-          job: Omit<
+        create(
+          data: Omit<
             Job,
             | 'id'
             | 'jobNumber'
             | 'createdAt'
             | 'updatedAt'
             | 'customerName'
+            | 'employeeName'
             | 'itemName'
             | 'itemSize'
             | 'categoryName'
+            | 'machineTypeName'
           >
-          machineEntries: Omit<JobMachineEntry, 'id' | 'jobId' | 'machineTypeName'>[]
-        }): Promise<Job>
+        ): Promise<Job>
         update(
           id: number,
-          data: {
-            job: Partial<
-              Omit<
-                Job,
-                | 'id'
-                | 'jobNumber'
-                | 'createdAt'
-                | 'updatedAt'
-                | 'customerName'
-                | 'itemName'
-                | 'itemSize'
-                | 'categoryName'
-              >
+          data: Partial<
+            Omit<
+              Job,
+              | 'id'
+              | 'jobNumber'
+              | 'createdAt'
+              | 'updatedAt'
+              | 'customerName'
+              | 'employeeName'
+              | 'itemName'
+              | 'itemSize'
+              | 'categoryName'
+              | 'machineTypeName'
             >
-            machineEntries?: Omit<JobMachineEntry, 'id' | 'jobId' | 'machineTypeName'>[]
-          }
+          >
         ): Promise<Job>
         delete(id: number): Promise<void>
-        getByCustomerItem(
-          customerId: number,
-          itemId: number
-        ): Promise<{ job: Job; machineEntries: JobMachineEntry[] } | null>
+        getByCustomerItem(customerId: number, itemId: number): Promise<Job | null>
+        getByMachine(machineTypeId: number, dateFrom: string, dateTo: string): Promise<Job[]>
+        getByEmployee(employeeId: number, dateFrom: string, dateTo: string): Promise<Job[]>
         getForReport(dateFrom: string, dateTo: string, customerId?: number): Promise<Job[]>
         getByCustomer(customerId: number, dateFrom?: string, dateTo?: string): Promise<Job[]>
       }
-      jobMachineEntries: {
-        listByJob(jobId: number): Promise<JobMachineEntry[]>
-        create(data: Omit<JobMachineEntry, 'id' | 'machineTypeName'>): Promise<JobMachineEntry>
-        delete(id: number): Promise<void>
-      }
-      reports: {
-        generatePDF(reportType: string, params: Record<string, unknown>): Promise<string>
-      }
       dashboard: {
-        getStats(): Promise<DashboardStats>
+        getStats(dateFrom?: string, dateTo?: string): Promise<DashboardStats>
       }
     }
   }

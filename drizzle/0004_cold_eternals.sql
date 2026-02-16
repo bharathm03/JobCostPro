@@ -1,0 +1,1 @@
+ALTER TABLE `machine_types` ADD `model` text;

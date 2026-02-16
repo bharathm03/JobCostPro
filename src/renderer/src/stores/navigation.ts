@@ -5,9 +5,15 @@ export type Page =
   | 'jobs'
   | 'job-form'
   | 'customers'
+  | 'employees'
   | 'items'
   | 'machines'
   | 'reports'
+  | 'report-cost-summary'
+  | 'report-customer-wise'
+  | 'report-machine-detail'
+  | 'report-employee-detail'
+  | 'report-waste'
 
 interface NavigationState {
   currentPage: Page

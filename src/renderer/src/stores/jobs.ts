@@ -7,10 +7,9 @@ interface JobStore {
   error: string | null
   filters: JobFilters
   fetchJobs: (filters?: JobFilters) => Promise<void>
-  createJob: (data: Omit<Job, 'id' | 'jobNumber' | 'createdAt' | 'updatedAt'>) => Promise<Job>
-  updateJob: (id: number, data: Partial<Omit<Job, 'id' | 'jobNumber' | 'createdAt' | 'updatedAt'>>) => Promise<void>
+  createJob: (data: Omit<Job, 'id' | 'jobNumber' | 'createdAt' | 'updatedAt' | 'customerName' | 'employeeName' | 'itemName' | 'itemSize' | 'categoryName' | 'machineTypeName'>) => Promise<Job>
+  updateJob: (id: number, data: Partial<Omit<Job, 'id' | 'jobNumber' | 'createdAt' | 'updatedAt' | 'customerName' | 'employeeName' | 'itemName' | 'itemSize' | 'categoryName' | 'machineTypeName'>>) => Promise<void>
   deleteJob: (id: number) => Promise<void>
-  getAutoFill: (customerId: number, itemId: number) => Promise<{ rate: number; wastePercentage: number } | null>
   setFilters: (filters: JobFilters) => void
 }
 
@@ -42,13 +41,6 @@ export const useJobStore = create<JobStore>((set, get) => ({
   deleteJob: async (id) => {
     await window.api.jobs.delete(id)
     set({ jobs: get().jobs.filter((j) => j.id !== id) })
-  },
-  getAutoFill: async (customerId, itemId) => {
-    try {
-      return await window.api.jobs.getAutoFill(customerId, itemId)
-    } catch {
-      return null
-    }
   },
   setFilters: (filters) => set({ filters })
 }))

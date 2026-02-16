@@ -7,7 +7,9 @@
       "Bash(npx shadcn@latest add button input label select table dialog card tabs badge separator sonner dropdown-menu command popover calendar --yes --overwrite)",
       "Bash(npx electron-vite build:*)",
       "Bash(npx drizzle-kit generate:*)",
-      "Bash(timeout 15 npx electron-vite dev:*)"
+      "Bash(timeout 15 npx electron-vite dev:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e:*)"
     ]
   }
 }

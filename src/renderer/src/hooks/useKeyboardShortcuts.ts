@@ -1,5 +1,15 @@
 import { useEffect } from 'react'
-import { useNavigation } from '@/stores/navigation'
+import { useNavigation, type Page } from '@/stores/navigation'
+
+const altKeyPages: Page[] = [
+  'dashboard',
+  'jobs',
+  'customers',
+  'employees',
+  'items',
+  'machines',
+  'reports'
+]
 
 export function useKeyboardShortcuts(): void {
   const navigate = useNavigation((s) => s.navigate)
@@ -23,6 +33,19 @@ export function useKeyboardShortcuts(): void {
         const currentPage = useNavigation.getState().currentPage
         if (currentPage === 'job-form') {
           navigate('jobs')
+        }
+      }
+
+      // Alt+1 through Alt+7 → Navigate sidebar pages
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        const num = parseInt(e.key, 10)
+        if (num >= 1 && num <= 7) {
+          // Skip when focus is in form elements
+          const tag = (e.target as HTMLElement)?.tagName
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+          e.preventDefault()
+          navigate(altKeyPages[num - 1])
         }
       }
     }

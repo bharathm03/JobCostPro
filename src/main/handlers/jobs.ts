@@ -1,10 +1,11 @@
 import { eq, and, like, desc, gte, lte, or, sql } from 'drizzle-orm'
 import { getDb } from '../db'
-import { jobs, customers, items, itemCategories, jobMachineEntries, machineTypes } from '../db/schema'
+import { jobs, customers, items, itemCategories, machineTypes, employees } from '../db/schema'
 
 interface JobCreateData {
   date: string
   customerId: number
+  employeeId?: number | null
   itemId: number
   quantity: number
   rate: number
@@ -13,16 +14,13 @@ interface JobCreateData {
   wasteAmount: number
   cooly: number
   totalAmount: number
+  machineTypeId?: number | null
+  machineCustomData?: string
+  machineCost?: number
+  machineWastePercentage?: number
+  machineWasteAmount?: number
   notes: string | null
   status: string
-}
-
-interface MachineEntryData {
-  machineTypeId: number
-  machineCustomData: string
-  cost: number
-  wastePercentage: number
-  wasteAmount: number
 }
 
 interface JobFilters {
@@ -38,28 +36,29 @@ function mapJobRow(row: {
   customers: typeof customers.$inferSelect | null
   items: typeof items.$inferSelect | null
   item_categories: typeof itemCategories.$inferSelect | null
+  employees?: typeof employees.$inferSelect | null
+  machine_types?: typeof machineTypes.$inferSelect | null
 }) {
   return {
     ...row.jobs,
     customerName: row.customers?.name ?? undefined,
+    employeeName: row.employees?.name ?? undefined,
     itemName: row.items?.name ?? undefined,
     itemSize: row.items?.size ?? undefined,
-    categoryName: row.item_categories?.name ?? undefined
+    categoryName: row.item_categories?.name ?? undefined,
+    machineTypeName: row.machine_types?.name ?? undefined
   }
 }
 
-function getJobWithJoins(db: ReturnType<typeof getDb>, jobId: number) {
-  const row = db
+function buildJobQuery(db: ReturnType<typeof getDb>) {
+  return db
     .select()
     .from(jobs)
     .leftJoin(customers, eq(jobs.customerId, customers.id))
+    .leftJoin(employees, eq(jobs.employeeId, employees.id))
     .leftJoin(items, eq(jobs.itemId, items.id))
     .leftJoin(itemCategories, eq(items.categoryId, itemCategories.id))
-    .where(eq(jobs.id, jobId))
-    .get()
-
-  if (!row) throw new Error(`Job ${jobId} not found`)
-  return mapJobRow(row)
+    .leftJoin(machineTypes, eq(jobs.machineTypeId, machineTypes.id))
 }
 
 export const jobsHandler = {
@@ -80,12 +79,7 @@ export const jobsHandler = {
       conditions.push(eq(jobs.customerId, filters.customerId))
     }
 
-    let query = db
-      .select()
-      .from(jobs)
-      .leftJoin(customers, eq(jobs.customerId, customers.id))
-      .leftJoin(items, eq(jobs.itemId, items.id))
-      .leftJoin(itemCategories, eq(items.categoryId, itemCategories.id))
+    let query = buildJobQuery(db)
       .orderBy(desc(jobs.date), desc(jobs.id))
       .$dynamic()
 
@@ -108,47 +102,39 @@ export const jobsHandler = {
     return rows.map(mapJobRow)
   },
 
-  create: async (data: { job: JobCreateData; machineEntries: MachineEntryData[] }) => {
+  create: async (data: JobCreateData) => {
     const db = getDb()
 
     return db.transaction((tx) => {
       // Generate job number: JOB-YYYYMMDD-NNN
-      const dateStr = data.job.date.replace(/-/g, '')
+      const dateStr = data.date.replace(/-/g, '')
       const countResult = tx
         .select({ count: sql<number>`count(*)` })
         .from(jobs)
-        .where(eq(jobs.date, data.job.date))
+        .where(eq(jobs.date, data.date))
         .get()
       const count = (countResult?.count ?? 0) + 1
       const jobNumber = `JOB-${dateStr}-${String(count).padStart(3, '0')}`
 
-      // Insert job
+      // Insert job with machine fields
       const newJob = tx
         .insert(jobs)
         .values({
-          ...data.job,
+          ...data,
           jobNumber
         })
         .returning()
         .get()
-
-      // Insert machine entries
-      for (const entry of data.machineEntries) {
-        tx.insert(jobMachineEntries)
-          .values({
-            ...entry,
-            jobId: newJob.id
-          })
-          .run()
-      }
 
       // Return with joins
       const row = tx
         .select()
         .from(jobs)
         .leftJoin(customers, eq(jobs.customerId, customers.id))
+        .leftJoin(employees, eq(jobs.employeeId, employees.id))
         .leftJoin(items, eq(jobs.itemId, items.id))
         .leftJoin(itemCategories, eq(items.categoryId, itemCategories.id))
+        .leftJoin(machineTypes, eq(jobs.machineTypeId, machineTypes.id))
         .where(eq(jobs.id, newJob.id))
         .get()
 
@@ -157,32 +143,15 @@ export const jobsHandler = {
     })
   },
 
-  update: async (
-    id: number,
-    data: { job: Partial<JobCreateData>; machineEntries?: MachineEntryData[] }
-  ) => {
+  update: async (id: number, data: Partial<JobCreateData>) => {
     const db = getDb()
 
     return db.transaction((tx) => {
-      // Update job fields
-      if (Object.keys(data.job).length > 0) {
+      if (Object.keys(data).length > 0) {
         tx.update(jobs)
-          .set({ ...data.job, updatedAt: sql`(datetime('now'))` })
+          .set({ ...data, updatedAt: sql`(datetime('now'))` })
           .where(eq(jobs.id, id))
           .run()
-      }
-
-      // If machine entries provided, replace them
-      if (data.machineEntries) {
-        tx.delete(jobMachineEntries).where(eq(jobMachineEntries.jobId, id)).run()
-        for (const entry of data.machineEntries) {
-          tx.insert(jobMachineEntries)
-            .values({
-              ...entry,
-              jobId: id
-            })
-            .run()
-        }
       }
 
       // Return with joins
@@ -190,8 +159,10 @@ export const jobsHandler = {
         .select()
         .from(jobs)
         .leftJoin(customers, eq(jobs.customerId, customers.id))
+        .leftJoin(employees, eq(jobs.employeeId, employees.id))
         .leftJoin(items, eq(jobs.itemId, items.id))
         .leftJoin(itemCategories, eq(items.categoryId, itemCategories.id))
+        .leftJoin(machineTypes, eq(jobs.machineTypeId, machineTypes.id))
         .where(eq(jobs.id, id))
         .get()
 
@@ -212,29 +183,42 @@ export const jobsHandler = {
       .select()
       .from(jobs)
       .leftJoin(customers, eq(jobs.customerId, customers.id))
+      .leftJoin(employees, eq(jobs.employeeId, employees.id))
       .leftJoin(items, eq(jobs.itemId, items.id))
       .leftJoin(itemCategories, eq(items.categoryId, itemCategories.id))
+      .leftJoin(machineTypes, eq(jobs.machineTypeId, machineTypes.id))
       .where(and(eq(jobs.customerId, customerId), eq(jobs.itemId, itemId)))
       .orderBy(desc(jobs.date), desc(jobs.id))
       .limit(1)
       .get()
 
     if (!row) return null
+    return mapJobRow(row)
+  },
 
-    const job = mapJobRow(row)
+  get: async (id: number) => {
+    const db = getDb()
+    const row = buildJobQuery(db).where(eq(jobs.id, id)).get()
+    if (!row) throw new Error(`Job ${id} not found`)
+    return mapJobRow(row)
+  },
 
-    const entries = db
-      .select()
-      .from(jobMachineEntries)
-      .leftJoin(machineTypes, eq(jobMachineEntries.machineTypeId, machineTypes.id))
-      .where(eq(jobMachineEntries.jobId, job.id))
+  getByMachine: async (machineTypeId: number, dateFrom: string, dateTo: string) => {
+    const db = getDb()
+    const rows = buildJobQuery(db)
+      .where(and(eq(jobs.machineTypeId, machineTypeId), gte(jobs.date, dateFrom), lte(jobs.date, dateTo)))
+      .orderBy(desc(jobs.date), desc(jobs.id))
       .all()
-      .map((e) => ({
-        ...e.job_machine_entries,
-        machineTypeName: e.machine_types?.name ?? undefined
-      }))
+    return rows.map(mapJobRow)
+  },
 
-    return { job, machineEntries: entries }
+  getByEmployee: async (employeeId: number, dateFrom: string, dateTo: string) => {
+    const db = getDb()
+    const rows = buildJobQuery(db)
+      .where(and(eq(jobs.employeeId, employeeId), gte(jobs.date, dateFrom), lte(jobs.date, dateTo)))
+      .orderBy(desc(jobs.date), desc(jobs.id))
+      .all()
+    return rows.map(mapJobRow)
   },
 
   getForReport: async (dateFrom: string, dateTo: string, customerId?: number) => {
@@ -245,12 +229,7 @@ export const jobsHandler = {
       conditions.push(eq(jobs.customerId, customerId))
     }
 
-    const rows = db
-      .select()
-      .from(jobs)
-      .leftJoin(customers, eq(jobs.customerId, customers.id))
-      .leftJoin(items, eq(jobs.itemId, items.id))
-      .leftJoin(itemCategories, eq(items.categoryId, itemCategories.id))
+    const rows = buildJobQuery(db)
       .where(and(...conditions))
       .orderBy(desc(jobs.date), desc(jobs.id))
       .all()
@@ -269,12 +248,7 @@ export const jobsHandler = {
       conditions.push(lte(jobs.date, dateTo))
     }
 
-    const rows = db
-      .select()
-      .from(jobs)
-      .leftJoin(customers, eq(jobs.customerId, customers.id))
-      .leftJoin(items, eq(jobs.itemId, items.id))
-      .leftJoin(itemCategories, eq(items.categoryId, itemCategories.id))
+    const rows = buildJobQuery(db)
       .where(and(...conditions))
       .orderBy(desc(jobs.date), desc(jobs.id))
       .all()

@@ -50,12 +50,28 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   )
 }
 
-function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+interface TableRowProps extends React.ComponentProps<"tr"> {
+  interactive?: boolean
+}
+
+function TableRow({ className, interactive, ...props }: TableRowProps) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTableRowElement>) {
+    if (!interactive) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      ;(e.target as HTMLElement).click()
+    }
+  }
+
   return (
     <tr
       data-slot="table-row"
+      tabIndex={interactive ? 0 : undefined}
+      role={interactive ? "button" : undefined}
+      onKeyDown={interactive ? handleKeyDown : undefined}
       className={cn(
         "hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors",
+        interactive && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         className
       )}
       {...props}

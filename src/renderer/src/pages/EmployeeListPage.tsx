@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useNavigation } from '@/stores/navigation'
-import { useCustomerStore } from '@/stores/customers'
-import type { Customer } from '@/types/models'
+import { useEmployeeStore } from '@/stores/employees'
+import { useMachineStore } from '@/stores/machines'
+import type { Employee } from '@/types/models'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,6 +15,13 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
+import {
   Table,
   TableHeader,
   TableRow,
@@ -24,98 +31,78 @@ import {
 } from '@/components/ui/table'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
-interface CustomerFormData {
+interface EmployeeFormData {
   name: string
   phone: string
-  address: string
+  machineTypeId: string
 }
 
-const emptyForm: CustomerFormData = { name: '', phone: '', address: '' }
+const emptyForm: EmployeeFormData = { name: '', phone: '', machineTypeId: '' }
 
-export function CustomerListPage() {
-  const { navigate } = useNavigation()
-  const { customers, loading, fetchCustomers, createCustomer, updateCustomer, deleteCustomer } =
-    useCustomerStore()
+export function EmployeeListPage() {
+  const { employees, loading, fetchEmployees, createEmployee, updateEmployee, deleteEmployee } =
+    useEmployeeStore()
+  const { machines, fetchMachines } = useMachineStore()
 
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
-  const [form, setForm] = useState<CustomerFormData>(emptyForm)
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
+  const [form, setForm] = useState<EmployeeFormData>(emptyForm)
   const [saving, setSaving] = useState(false)
 
-  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
-  const [jobCounts, setJobCounts] = useState<Record<number, number>>({})
-
   useEffect(() => {
-    fetchCustomers().catch(() => {
-      toast.error('Failed to load customers')
+    fetchEmployees().catch(() => {
+      toast.error('Failed to load employees')
     })
-  }, [fetchCustomers])
-
-  useEffect(() => {
-    async function loadJobCounts() {
-      const counts: Record<number, number> = {}
-      for (const customer of customers) {
-        try {
-          const jobs = await window.api.jobs.list({ customerId: customer.id })
-          counts[customer.id] = jobs.length
-        } catch {
-          counts[customer.id] = 0
-        }
-      }
-      setJobCounts(counts)
-    }
-    if (customers.length > 0) {
-      loadJobCounts()
-    }
-  }, [customers])
+    fetchMachines()
+  }, [fetchEmployees, fetchMachines])
 
   function openAddDialog() {
-    setEditingCustomer(null)
+    setEditingEmployee(null)
     setForm(emptyForm)
     setDialogOpen(true)
   }
 
-  function openEditDialog(customer: Customer) {
-    setEditingCustomer(customer)
+  function openEditDialog(employee: Employee) {
+    setEditingEmployee(employee)
     setForm({
-      name: customer.name,
-      phone: customer.phone ?? '',
-      address: customer.address ?? ''
+      name: employee.name,
+      phone: employee.phone ?? '',
+      machineTypeId: String(employee.machineTypeId)
     })
     setDialogOpen(true)
   }
 
-  function openDeleteConfirm(customer: Customer) {
-    setDeleteTarget(customer)
+  function openDeleteConfirm(employee: Employee) {
+    setDeleteTarget(employee)
     setConfirmOpen(true)
   }
 
   async function handleSave() {
     if (!form.name.trim()) {
-      toast.error('Customer name is required')
+      toast.error('Employee name is required')
       return
     }
-
     setSaving(true)
     try {
       const data = {
         name: form.name.trim(),
         phone: form.phone.trim() || null,
-        address: form.address.trim() || null
+        machineTypeId: form.machineTypeId ? Number(form.machineTypeId) : null
       }
 
-      if (editingCustomer) {
-        await updateCustomer(editingCustomer.id, data)
-        toast.success('Customer updated successfully')
+      if (editingEmployee) {
+        await updateEmployee(editingEmployee.id, data)
+        toast.success('Employee updated successfully')
       } else {
-        await createCustomer(data)
-        toast.success('Customer created successfully')
+        await createEmployee(data)
+        toast.success('Employee created successfully')
       }
       setDialogOpen(false)
     } catch (err) {
-      toast.error((err as Error).message || 'Failed to save customer')
+      toast.error((err as Error).message || 'Failed to save employee')
     } finally {
       setSaving(false)
     }
@@ -124,10 +111,10 @@ export function CustomerListPage() {
   async function handleDelete() {
     if (!deleteTarget) return
     try {
-      await deleteCustomer(deleteTarget.id)
-      toast.success('Customer deleted successfully')
+      await deleteEmployee(deleteTarget.id)
+      toast.success('Employee deleted successfully')
     } catch (err) {
-      toast.error((err as Error).message || 'Failed to delete customer')
+      toast.error((err as Error).message || 'Failed to delete employee')
     }
     setDeleteTarget(null)
   }
@@ -136,25 +123,25 @@ export function CustomerListPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Customers</h1>
-          <p className="text-muted-foreground">Manage your customer directory.</p>
+          <h1 className="text-2xl font-semibold">Employees</h1>
+          <p className="text-muted-foreground">Manage your employee directory.</p>
         </div>
         <Button onClick={openAddDialog}>
           <Plus />
-          Add Customer
+          Add Employee
         </Button>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-muted-foreground">Loading customers...</p>
+          <p className="text-muted-foreground">Loading employees...</p>
         </div>
-      ) : customers.length === 0 ? (
+      ) : employees.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 gap-4">
-          <p className="text-muted-foreground">No customers yet. Add your first customer to get started.</p>
+          <p className="text-muted-foreground">No employees yet. Add your first employee to get started.</p>
           <Button onClick={openAddDialog}>
             <Plus />
-            Add First Customer
+            Add First Employee
           </Button>
         </div>
       ) : (
@@ -163,38 +150,31 @@ export function CustomerListPage() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Phone</TableHead>
-              <TableHead className="text-right">Total Jobs</TableHead>
+              <TableHead>Machine Type</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {customers.map((customer) => (
-              <TableRow key={customer.id}>
-                <TableCell>
-                  <button
-                    className="font-medium text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
-                    onClick={() => navigate('jobs', { customerId: customer.id })}
-                  >
-                    {customer.name}
-                  </button>
-                </TableCell>
-                <TableCell>{customer.phone ?? '-'}</TableCell>
-                <TableCell className="text-right">{jobCounts[customer.id] ?? 0}</TableCell>
+            {employees.map((employee) => (
+              <TableRow key={employee.id}>
+                <TableCell className="font-medium">{employee.name}</TableCell>
+                <TableCell>{employee.phone ?? '-'}</TableCell>
+                <TableCell>{employee.machineTypeName ?? '-'}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={`Edit ${customer.name}`}
-                      onClick={() => openEditDialog(customer)}
+                      aria-label={`Edit ${employee.name}`}
+                      onClick={() => openEditDialog(employee)}
                     >
                       <Pencil />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={`Delete ${customer.name}`}
-                      onClick={() => openDeleteConfirm(customer)}
+                      aria-label={`Delete ${employee.name}`}
+                      onClick={() => openDeleteConfirm(employee)}
                     >
                       <Trash2 className="text-destructive" />
                     </Button>
@@ -210,35 +190,45 @@ export function CustomerListPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingCustomer ? 'Edit Customer' : 'Add Customer'}</DialogTitle>
+            <DialogTitle>{editingEmployee ? 'Edit Employee' : 'Add Employee'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="customer-name">Name *</Label>
+              <Label htmlFor="employee-name">Name *</Label>
               <Input
-                id="customer-name"
+                id="employee-name"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Customer name"
+                placeholder="Employee name"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="customer-phone">Phone</Label>
+              <Label htmlFor="employee-phone">Phone</Label>
               <Input
-                id="customer-phone"
+                id="employee-phone"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 placeholder="Phone number"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="customer-address">Address</Label>
-              <Input
-                id="customer-address"
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-                placeholder="Address"
-              />
+              <Label>Machine Type</Label>
+              <Select
+                value={form.machineTypeId}
+                onValueChange={(val) => setForm({ ...form, machineTypeId: val === 'none' ? '' : val })}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select machine type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {machines.map((machine) => (
+                    <SelectItem key={machine.id} value={String(machine.id)}>
+                      {machine.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
@@ -256,7 +246,7 @@ export function CustomerListPage() {
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title="Delete Customer"
+        title="Delete Employee"
         description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
         onConfirm={handleDelete}
         variant="destructive"

@@ -3,17 +3,19 @@ import { getDb } from '../db'
 import { jobs, customers, items, itemCategories } from '../db/schema'
 
 export const dashboardHandler = {
-  getStats: async () => {
+  getStats: async (dateFrom?: string, dateTo?: string) => {
     const db = getDb()
 
-    // Current month boundaries
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const dateFrom = `${year}-${month}-01`
-    const dateTo = `${year}-${month}-31`
+    // Default to current month if no range provided
+    if (!dateFrom || !dateTo) {
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      dateFrom = `${year}-${month}-01`
+      dateTo = `${year}-${month}-31`
+    }
 
-    // Aggregate stats for current month
+    // Aggregate stats for date range
     const statsRow = db
       .select({
         totalJobs: sql<number>`count(*)`,
@@ -25,13 +27,14 @@ export const dashboardHandler = {
       .where(and(gte(jobs.date, dateFrom), lte(jobs.date, dateTo)))
       .get()
 
-    // Recent 10 jobs with joins
+    // Recent 10 jobs within date range
     const recentRows = db
       .select()
       .from(jobs)
       .leftJoin(customers, eq(jobs.customerId, customers.id))
       .leftJoin(items, eq(jobs.itemId, items.id))
       .leftJoin(itemCategories, eq(items.categoryId, itemCategories.id))
+      .where(and(gte(jobs.date, dateFrom), lte(jobs.date, dateTo)))
       .orderBy(desc(jobs.date), desc(jobs.id))
       .limit(10)
       .all()

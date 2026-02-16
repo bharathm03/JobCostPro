@@ -195,8 +195,10 @@ export function JobListPage() {
               <TableHead>Date</TableHead>
               <TableHead>Job #</TableHead>
               <TableHead>Customer</TableHead>
+              <TableHead>Employee</TableHead>
               <TableHead>Item</TableHead>
               <TableHead>Size</TableHead>
+              <TableHead>Machine</TableHead>
               <TableHead className="text-right">Qty</TableHead>
               <TableHead className="text-right">Rate</TableHead>
               <TableHead className="text-right">Amount</TableHead>
@@ -206,18 +208,30 @@ export function JobListPage() {
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody onKeyDown={(e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              const rows = Array.from((e.currentTarget as HTMLElement).querySelectorAll('tr[tabindex]'))
+              const idx = rows.indexOf(e.target as Element)
+              if (idx === -1) return
+              e.preventDefault()
+              const next = e.key === 'ArrowDown' ? rows[idx + 1] : rows[idx - 1]
+              ;(next as HTMLElement)?.focus()
+            }
+          }}>
             {filteredJobs.map((job) => (
               <TableRow
                 key={job.id}
-                className="cursor-pointer"
+                interactive
+                aria-label={`Job ${job.jobNumber} - ${job.customerName ?? 'No customer'}`}
                 onClick={() => navigate('job-form', { jobId: job.id })}
               >
                 <TableCell>{formatDate(job.date)}</TableCell>
                 <TableCell className="font-medium">{job.jobNumber}</TableCell>
                 <TableCell>{job.customerName ?? '-'}</TableCell>
+                <TableCell>{job.employeeName ?? '-'}</TableCell>
                 <TableCell>{job.itemName ?? '-'}</TableCell>
                 <TableCell>{job.itemSize ?? '-'}</TableCell>
+                <TableCell>{job.machineTypeName ?? '-'}</TableCell>
                 <TableCell className="text-right">{job.quantity}</TableCell>
                 <TableCell className="text-right">{formatINR(job.rate)}</TableCell>
                 <TableCell className="text-right">{formatINR(job.amount)}</TableCell>

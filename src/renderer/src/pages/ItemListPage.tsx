@@ -206,6 +206,7 @@ export function ItemListPage() {
                     <Button
                       variant="ghost"
                       size="icon-xs"
+                      aria-label={`Edit ${item.name}`}
                       onClick={() => openEditDialog(item)}
                     >
                       <Pencil />
@@ -213,6 +214,7 @@ export function ItemListPage() {
                     <Button
                       variant="ghost"
                       size="icon-xs"
+                      aria-label={`Delete ${item.name}`}
                       onClick={() => openDeleteConfirm(item)}
                     >
                       <Trash2 className="text-destructive" />

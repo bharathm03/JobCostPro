@@ -1,12 +1,11 @@
 import { ipcMain } from 'electron'
 import { customersHandler } from './customers'
+import { employeesHandler } from './employees'
 import { categoriesHandler } from './categories'
 import { itemsHandler } from './items'
 import { machinesHandler } from './machines'
 import { jobsHandler } from './jobs'
-import { jobMachineEntriesHandler } from './job-machine-entries'
 import { dashboardHandler } from './dashboard'
-import { reportsHandler } from './reports'
 
 export function registerHandlers(): void {
   // Customers
@@ -42,6 +41,43 @@ export function registerHandlers(): void {
       return await customersHandler.delete(id)
     } catch (err) {
       console.error('customers:delete error:', err)
+      throw err
+    }
+  })
+
+  // Employees
+  ipcMain.handle('employees:list', async () => {
+    try {
+      return await employeesHandler.list()
+    } catch (err) {
+      console.error('employees:list error:', err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('employees:create', async (_event, data) => {
+    try {
+      return await employeesHandler.create(data)
+    } catch (err) {
+      console.error('employees:create error:', err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('employees:update', async (_event, id, data) => {
+    try {
+      return await employeesHandler.update(id, data)
+    } catch (err) {
+      console.error('employees:update error:', err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('employees:delete', async (_event, id) => {
+    try {
+      return await employeesHandler.delete(id)
+    } catch (err) {
+      console.error('employees:delete error:', err)
       throw err
     }
   })
@@ -167,6 +203,24 @@ export function registerHandlers(): void {
     }
   })
 
+  ipcMain.handle('jobs:getByMachine', async (_event, machineTypeId, dateFrom, dateTo) => {
+    try {
+      return await jobsHandler.getByMachine(machineTypeId, dateFrom, dateTo)
+    } catch (err) {
+      console.error('jobs:getByMachine error:', err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('jobs:getByEmployee', async (_event, employeeId, dateFrom, dateTo) => {
+    try {
+      return await jobsHandler.getByEmployee(employeeId, dateFrom, dateTo)
+    } catch (err) {
+      console.error('jobs:getByEmployee error:', err)
+      throw err
+    }
+  })
+
   ipcMain.handle('jobs:getForReport', async (_event, dateFrom, dateTo, customerId) => {
     try {
       return await jobsHandler.getForReport(dateFrom, dateTo, customerId)
@@ -185,48 +239,10 @@ export function registerHandlers(): void {
     }
   })
 
-  // Job Machine Entries
-  ipcMain.handle('jobMachineEntries:listByJob', async (_event, jobId) => {
-    try {
-      return await jobMachineEntriesHandler.listByJob(jobId)
-    } catch (err) {
-      console.error('jobMachineEntries:listByJob error:', err)
-      throw err
-    }
-  })
-
-  ipcMain.handle('jobMachineEntries:create', async (_event, data) => {
-    try {
-      return await jobMachineEntriesHandler.create(data)
-    } catch (err) {
-      console.error('jobMachineEntries:create error:', err)
-      throw err
-    }
-  })
-
-  ipcMain.handle('jobMachineEntries:delete', async (_event, id) => {
-    try {
-      return await jobMachineEntriesHandler.delete(id)
-    } catch (err) {
-      console.error('jobMachineEntries:delete error:', err)
-      throw err
-    }
-  })
-
-  // Reports
-  ipcMain.handle('reports:generatePDF', async (_event, reportType, params) => {
-    try {
-      return await reportsHandler.generatePDF(reportType, params)
-    } catch (err) {
-      console.error('reports:generatePDF error:', err)
-      throw err
-    }
-  })
-
   // Dashboard
-  ipcMain.handle('dashboard:getStats', async () => {
+  ipcMain.handle('dashboard:getStats', async (_e, dateFrom?: string, dateTo?: string) => {
     try {
-      return await dashboardHandler.getStats()
+      return await dashboardHandler.getStats(dateFrom, dateTo)
     } catch (err) {
       console.error('dashboard:getStats error:', err)
       throw err

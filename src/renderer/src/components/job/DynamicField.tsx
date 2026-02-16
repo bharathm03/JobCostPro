@@ -13,21 +13,25 @@ interface DynamicFieldProps {
   field: MachineFieldSchema
   value: unknown
   onChange: (name: string, value: unknown) => void
+  onAdvance?: () => void
 }
 
-export function DynamicField({ field, value, onChange }: DynamicFieldProps) {
+export function DynamicField({ field, value, onChange, onAdvance }: DynamicFieldProps) {
   const id = `dynamic-field-${field.name}`
 
   if (field.type === 'select') {
     return (
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor={id}>
           {field.label}
           {field.required && <span className="text-destructive ml-1">*</span>}
         </Label>
         <Select
           value={String(value ?? '')}
-          onValueChange={(val) => onChange(field.name, val)}
+          onValueChange={(val) => {
+            onChange(field.name, val)
+            if (onAdvance) setTimeout(onAdvance, 0)
+          }}
         >
           <SelectTrigger id={id} className="w-full">
             <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
@@ -45,7 +49,7 @@ export function DynamicField({ field, value, onChange }: DynamicFieldProps) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <Label htmlFor={id}>
         {field.label}
         {field.required && <span className="text-destructive ml-1">*</span>}
@@ -60,6 +64,12 @@ export function DynamicField({ field, value, onChange }: DynamicFieldProps) {
             field.type === 'number' ? Number(e.target.value) || 0 : e.target.value
           )
         }
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            onAdvance?.()
+          }
+        }}
         placeholder={`Enter ${field.label.toLowerCase()}`}
       />
     </div>

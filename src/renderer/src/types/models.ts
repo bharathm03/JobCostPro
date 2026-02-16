@@ -6,6 +6,15 @@ export interface Customer {
   createdAt: string
 }
 
+export interface Employee {
+  id: number
+  name: string
+  phone: string | null
+  machineTypeId: number | null
+  createdAt: string
+  machineTypeName?: string
+}
+
 export interface ItemCategory {
   id: number
   name: string
@@ -21,6 +30,7 @@ export interface Item {
 export interface MachineType {
   id: number
   name: string
+  model: string | null
   description: string | null
   customFieldsSchema: string // JSON string
 }
@@ -38,6 +48,7 @@ export interface Job {
   jobNumber: string
   date: string
   customerId: number
+  employeeId?: number | null
   itemId: number
   quantity: number
   rate: number
@@ -46,26 +57,21 @@ export interface Job {
   wasteAmount: number
   cooly: number
   totalAmount: number
+  machineTypeId?: number | null
+  machineCustomData?: string
+  machineCost?: number
+  machineWastePercentage?: number
+  machineWasteAmount?: number
   notes: string | null
   status: string
   createdAt: string
   updatedAt: string
-  // Joined fields (optional, filled when joining)
+  // Joined fields
   customerName?: string
+  employeeName?: string
   itemName?: string
   itemSize?: string
   categoryName?: string
-}
-
-export interface JobMachineEntry {
-  id: number
-  jobId: number
-  machineTypeId: number
-  machineCustomData: string // JSON string
-  cost: number
-  wastePercentage: number
-  wasteAmount: number
-  // Joined
   machineTypeName?: string
 }
 
