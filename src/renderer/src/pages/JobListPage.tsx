@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { Plus, Search, CalendarIcon, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigation } from '@/stores/navigation'
@@ -74,14 +74,30 @@ export function JobListPage() {
     setMachineModalOpen(true)
   }
 
-  const handleMachineConfirm = () => {
+  const handleMachineConfirm = useCallback(() => {
     if (!selectedMachineId) {
       toast.error('Please select a machine')
       return
     }
     setMachineModalOpen(false)
     navigate('job-form', { machineTypeId: selectedMachineId })
-  }
+  }, [selectedMachineId, navigate])
+
+  // Keyboard shortcuts for machine selection modal
+  useEffect(() => {
+    if (!machineModalOpen) return
+    const handler = (e: KeyboardEvent) => {
+      const num = parseInt(e.key, 10)
+      if (num >= 1 && num <= machines.length) {
+        setSelectedMachineId(machines[num - 1].id)
+      } else if (e.key === 'Enter' && selectedMachineId) {
+        e.preventDefault()
+        handleMachineConfirm()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [machineModalOpen, machines, selectedMachineId, handleMachineConfirm])
 
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
@@ -289,7 +305,7 @@ export function JobListPage() {
                 No machines available. Please add machines first.
               </p>
             ) : (
-              machines.map((machine) => (
+              machines.map((machine, index) => (
                 <button
                   key={machine.id}
                   type="button"
@@ -301,22 +317,25 @@ export function JobListPage() {
                       : 'border-border'
                   )}
                 >
-                  <div
+                  <kbd
                     className={cn(
-                      'flex size-5 shrink-0 items-center justify-center rounded-full border',
+                      'flex size-6 shrink-0 items-center justify-center rounded border text-xs font-mono font-semibold',
                       selectedMachineId === machine.id
                         ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-muted-foreground/30'
+                        : 'border-muted-foreground/30 bg-muted text-muted-foreground'
                     )}
                   >
-                    {selectedMachineId === machine.id && <Check className="size-3" />}
-                  </div>
-                  <div>
+                    {index + 1}
+                  </kbd>
+                  <div className="flex-1">
                     <div className="font-medium text-sm">{machine.name}</div>
                     {machine.model && (
                       <div className="text-xs text-muted-foreground">{machine.model}</div>
                     )}
                   </div>
+                  {selectedMachineId === machine.id && (
+                    <Check className="size-4 shrink-0 text-primary" />
+                  )}
                 </button>
               ))
             )}
