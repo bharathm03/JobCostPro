@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Plus, Search, CalendarIcon } from 'lucide-react'
+import { Plus, Search, CalendarIcon, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigation } from '@/stores/navigation'
 import { useJobStore } from '@/stores/jobs'
+import { useMachineStore } from '@/stores/machines'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,14 @@ import {
 } from '@/components/ui/table'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog'
 
 function getStatusBadge(status: string) {
   switch (status) {
@@ -38,11 +47,16 @@ function getStatusBadge(status: string) {
 export function JobListPage() {
   const { navigate, pageParams } = useNavigation()
   const { jobs, loading, fetchJobs } = useJobStore()
+  const { machines, fetchMachines } = useMachineStore()
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
+
+  // Machine selection modal state
+  const [machineModalOpen, setMachineModalOpen] = useState(false)
+  const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null)
 
   useEffect(() => {
     const filters: Record<string, unknown> = {}
@@ -52,7 +66,22 @@ export function JobListPage() {
     fetchJobs(filters).catch(() => {
       toast.error('Failed to load jobs')
     })
-  }, [fetchJobs, pageParams?.customerId])
+    fetchMachines()
+  }, [fetchJobs, fetchMachines, pageParams?.customerId])
+
+  const handleNewJob = () => {
+    setSelectedMachineId(null)
+    setMachineModalOpen(true)
+  }
+
+  const handleMachineConfirm = () => {
+    if (!selectedMachineId) {
+      toast.error('Please select a machine')
+      return
+    }
+    setMachineModalOpen(false)
+    navigate('job-form', { machineTypeId: selectedMachineId })
+  }
 
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
@@ -96,7 +125,7 @@ export function JobListPage() {
             Manage all production jobs and their costing details.
           </p>
         </div>
-        <Button onClick={() => navigate('job-form')}>
+        <Button onClick={handleNewJob}>
           <Plus />
           New Job
         </Button>
@@ -182,7 +211,7 @@ export function JobListPage() {
             {jobs.length === 0 ? 'No jobs found. Create your first job to get started.' : 'No jobs match your filters.'}
           </p>
           {jobs.length === 0 && (
-            <Button onClick={() => navigate('job-form')}>
+            <Button onClick={handleNewJob}>
               <Plus />
               Create First Job
             </Button>
@@ -244,6 +273,64 @@ export function JobListPage() {
           </TableBody>
         </Table>
       )}
+
+      {/* Machine Selection Modal */}
+      <Dialog open={machineModalOpen} onOpenChange={setMachineModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select Machine</DialogTitle>
+            <DialogDescription>
+              Choose the machine for this job before proceeding.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-4">
+            {machines.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No machines available. Please add machines first.
+              </p>
+            ) : (
+              machines.map((machine) => (
+                <button
+                  key={machine.id}
+                  type="button"
+                  onClick={() => setSelectedMachineId(machine.id)}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-accent',
+                    selectedMachineId === machine.id
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-border'
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'flex size-5 shrink-0 items-center justify-center rounded-full border',
+                      selectedMachineId === machine.id
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-muted-foreground/30'
+                    )}
+                  >
+                    {selectedMachineId === machine.id && <Check className="size-3" />}
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm">{machine.name}</div>
+                    {machine.model && (
+                      <div className="text-xs text-muted-foreground">{machine.model}</div>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMachineModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleMachineConfirm} disabled={!selectedMachineId}>
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
