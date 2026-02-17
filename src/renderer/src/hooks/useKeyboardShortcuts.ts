@@ -16,10 +16,10 @@ export function useKeyboardShortcuts(): void {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
-      // Ctrl+N → New Job
+      // Ctrl+N → New Job (opens machine selection modal)
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault()
-        navigate('job-form')
+        window.dispatchEvent(new CustomEvent('app:new-job'))
       }
 
       // Ctrl+S → Save (dispatches custom event for forms to listen to)

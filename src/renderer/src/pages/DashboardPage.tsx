@@ -133,7 +133,7 @@ export function DashboardPage() {
 
       {/* Quick Actions */}
       <div className="flex gap-3">
-        <Button onClick={() => navigate('job-form')}>New Job</Button>
+        <Button onClick={() => window.dispatchEvent(new CustomEvent('app:new-job'))}>New Job</Button>
         <Button variant="outline" onClick={() => navigate('customers')}>
           New Customer
         </Button>

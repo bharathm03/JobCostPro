@@ -1,9 +1,8 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
-import { Plus, Search, CalendarIcon, Check } from 'lucide-react'
+import { useEffect, useState, useMemo } from 'react'
+import { Plus, Search, CalendarIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigation } from '@/stores/navigation'
 import { useJobStore } from '@/stores/jobs'
-import { useMachineStore } from '@/stores/machines'
 import { formatINR, formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -20,14 +19,6 @@ import {
 } from '@/components/ui/table'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from '@/components/ui/dialog'
 
 function getStatusBadge(status: string) {
   switch (status) {
@@ -47,16 +38,11 @@ function getStatusBadge(status: string) {
 export function JobListPage() {
   const { navigate, pageParams } = useNavigation()
   const { jobs, loading, fetchJobs } = useJobStore()
-  const { machines, fetchMachines } = useMachineStore()
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
-
-  // Machine selection modal state
-  const [machineModalOpen, setMachineModalOpen] = useState(false)
-  const [selectedMachineId, setSelectedMachineId] = useState<number | null>(null)
 
   useEffect(() => {
     const filters: Record<string, unknown> = {}
@@ -66,38 +52,11 @@ export function JobListPage() {
     fetchJobs(filters).catch(() => {
       toast.error('Failed to load jobs')
     })
-    fetchMachines()
-  }, [fetchJobs, fetchMachines, pageParams?.customerId])
+  }, [fetchJobs, pageParams?.customerId])
 
   const handleNewJob = () => {
-    setSelectedMachineId(null)
-    setMachineModalOpen(true)
+    window.dispatchEvent(new CustomEvent('app:new-job'))
   }
-
-  const handleMachineConfirm = useCallback(() => {
-    if (!selectedMachineId) {
-      toast.error('Please select a machine')
-      return
-    }
-    setMachineModalOpen(false)
-    navigate('job-form', { machineTypeId: selectedMachineId })
-  }, [selectedMachineId, navigate])
-
-  // Keyboard shortcuts for machine selection modal
-  useEffect(() => {
-    if (!machineModalOpen) return
-    const handler = (e: KeyboardEvent) => {
-      const num = parseInt(e.key, 10)
-      if (num >= 1 && num <= machines.length) {
-        setSelectedMachineId(machines[num - 1].id)
-      } else if (e.key === 'Enter' && selectedMachineId) {
-        e.preventDefault()
-        handleMachineConfirm()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [machineModalOpen, machines, selectedMachineId, handleMachineConfirm])
 
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
@@ -290,66 +249,6 @@ export function JobListPage() {
         </Table>
       )}
 
-      {/* Machine Selection Modal */}
-      <Dialog open={machineModalOpen} onOpenChange={setMachineModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Select Machine</DialogTitle>
-            <DialogDescription>
-              Choose the machine for this job before proceeding.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2 py-4">
-            {machines.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No machines available. Please add machines first.
-              </p>
-            ) : (
-              machines.map((machine, index) => (
-                <button
-                  key={machine.id}
-                  type="button"
-                  onClick={() => setSelectedMachineId(machine.id)}
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-accent',
-                    selectedMachineId === machine.id
-                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                      : 'border-border'
-                  )}
-                >
-                  <kbd
-                    className={cn(
-                      'flex size-6 shrink-0 items-center justify-center rounded border text-xs font-mono font-semibold',
-                      selectedMachineId === machine.id
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-muted-foreground/30 bg-muted text-muted-foreground'
-                    )}
-                  >
-                    {index + 1}
-                  </kbd>
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">{machine.name}</div>
-                    {machine.model && (
-                      <div className="text-xs text-muted-foreground">{machine.model}</div>
-                    )}
-                  </div>
-                  {selectedMachineId === machine.id && (
-                    <Check className="size-4 shrink-0 text-primary" />
-                  )}
-                </button>
-              ))
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMachineModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleMachineConfirm} disabled={!selectedMachineId}>
-              Continue
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
