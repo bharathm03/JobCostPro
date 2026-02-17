@@ -54,6 +54,10 @@ export function JobListPage() {
     })
   }, [fetchJobs, pageParams?.customerId])
 
+  const handleNewJob = () => {
+    window.dispatchEvent(new CustomEvent('app:new-job'))
+  }
+
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
       // Search filter
@@ -96,7 +100,7 @@ export function JobListPage() {
             Manage all production jobs and their costing details.
           </p>
         </div>
-        <Button onClick={() => navigate('job-form')}>
+        <Button onClick={handleNewJob}>
           <Plus />
           New Job
         </Button>
@@ -182,7 +186,7 @@ export function JobListPage() {
             {jobs.length === 0 ? 'No jobs found. Create your first job to get started.' : 'No jobs match your filters.'}
           </p>
           {jobs.length === 0 && (
-            <Button onClick={() => navigate('job-form')}>
+            <Button onClick={handleNewJob}>
               <Plus />
               Create First Job
             </Button>
@@ -244,6 +248,7 @@ export function JobListPage() {
           </TableBody>
         </Table>
       )}
+
     </div>
   )
 }

@@ -101,6 +101,7 @@ const DEFAULT_FORM: FormState = {
 export function JobFormPage() {
   const { pageParams, navigate } = useNavigation()
   const jobId = pageParams.jobId as number | undefined
+  const preselectedMachineId = pageParams.machineTypeId as number | undefined
   const isEditMode = jobId != null
   const formRef = useRef<HTMLFormElement>(null)
   const handleSaveRef = useRef<() => void>(() => {})
@@ -112,8 +113,12 @@ export function JobFormPage() {
   const { machines, fetchMachines } = useMachineStore()
   const { employees, fetchEmployees } = useEmployeeStore()
 
-  // Form state
-  const [form, setForm] = useState<FormState>(DEFAULT_FORM)
+  // Form state — pre-fill machine from modal selection if provided
+  const [form, setForm] = useState<FormState>(() =>
+    preselectedMachineId
+      ? { ...DEFAULT_FORM, machineTypeId: preselectedMachineId }
+      : DEFAULT_FORM
+  )
   const [saving, setSaving] = useState(false)
 
   // Auto-fill state
@@ -800,25 +805,31 @@ export function JobFormPage() {
           <h3 className="text-sm font-medium text-muted-foreground">Machine</h3>
           <div className="space-y-1">
             <Label>Machine Type</Label>
-            <Select
-              value={form.machineTypeId ? String(form.machineTypeId) : 'none'}
-              onValueChange={(val) => {
-                handleMachineChange(val)
-                advanceFromTrigger('machine-trigger')
-              }}
-            >
-              <SelectTrigger id="machine-trigger" className="w-full max-w-sm" data-field-trigger>
-                <SelectValue placeholder="Select machine..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {machines.map((machine) => (
-                  <SelectItem key={machine.id} value={String(machine.id)}>
-                    {machine.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {preselectedMachineId && !isEditMode ? (
+              <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm font-medium max-w-sm">
+                {selectedMachine?.name ?? 'Loading...'}
+              </div>
+            ) : (
+              <Select
+                value={form.machineTypeId ? String(form.machineTypeId) : 'none'}
+                onValueChange={(val) => {
+                  handleMachineChange(val)
+                  advanceFromTrigger('machine-trigger')
+                }}
+              >
+                <SelectTrigger id="machine-trigger" className="w-full max-w-sm" data-field-trigger>
+                  <SelectValue placeholder="Select machine..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {machines.map((machine) => (
+                    <SelectItem key={machine.id} value={String(machine.id)}>
+                      {machine.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {selectedMachine && (
