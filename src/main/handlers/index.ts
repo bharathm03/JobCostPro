@@ -92,6 +92,33 @@ export function registerHandlers(): void {
     }
   })
 
+  ipcMain.handle('categories:create', async (_event, data) => {
+    try {
+      return await categoriesHandler.create(data)
+    } catch (err) {
+      console.error('categories:create error:', err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('categories:update', async (_event, id, data) => {
+    try {
+      return await categoriesHandler.update(id, data)
+    } catch (err) {
+      console.error('categories:update error:', err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('categories:delete', async (_event, id) => {
+    try {
+      return await categoriesHandler.delete(id)
+    } catch (err) {
+      console.error('categories:delete error:', err)
+      throw err
+    }
+  })
+
   // Items
   ipcMain.handle('items:list', async () => {
     try {

@@ -207,7 +207,6 @@ export function JobListPage() {
               <TableHead className="text-right">Rate</TableHead>
               <TableHead className="text-right">Amount</TableHead>
               <TableHead className="text-right">Cooly</TableHead>
-              <TableHead className="text-right">Waste</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
@@ -240,7 +239,6 @@ export function JobListPage() {
                 <TableCell className="text-right">{formatINR(job.rate)}</TableCell>
                 <TableCell className="text-right">{formatINR(job.amount)}</TableCell>
                 <TableCell className="text-right">{formatINR(job.cooly)}</TableCell>
-                <TableCell className="text-right">{job.wastePercentage}%</TableCell>
                 <TableCell className="text-right">{formatINR(job.totalAmount)}</TableCell>
                 <TableCell>{getStatusBadge(job.status)}</TableCell>
               </TableRow>

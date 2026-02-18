@@ -104,9 +104,7 @@ export function WasteReportPage() {
                   <TableHead>Item</TableHead>
                   <TableHead>Machine</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Waste %</TableHead>
                   <TableHead className="text-right">Waste Amount</TableHead>
-                  <TableHead className="text-right">Machine Waste %</TableHead>
                   <TableHead className="text-right">Machine Waste Amt</TableHead>
                 </TableRow>
               </TableHeader>
@@ -118,9 +116,7 @@ export function WasteReportPage() {
                     <TableCell>{j.itemName}</TableCell>
                     <TableCell>{j.machineTypeName ?? '-'}</TableCell>
                     <TableCell className="text-right">{j.quantity}</TableCell>
-                    <TableCell className="text-right">{j.wastePercentage}%</TableCell>
                     <TableCell className="text-right">{formatINR(j.wasteAmount)}</TableCell>
-                    <TableCell className="text-right">{j.machineWastePercentage != null ? `${j.machineWastePercentage}%` : '-'}</TableCell>
                     <TableCell className="text-right">{j.machineWasteAmount != null ? formatINR(j.machineWasteAmount) : '-'}</TableCell>
                   </TableRow>
                 ))}

@@ -10,14 +10,12 @@ interface JobCreateData {
   quantity: number
   rate: number
   amount: number
-  wastePercentage: number
   wasteAmount: number
   cooly: number
   totalAmount: number
   machineTypeId?: number | null
   machineCustomData?: string
   machineCost?: number
-  machineWastePercentage?: number
   machineWasteAmount?: number
   notes: string | null
   status: string

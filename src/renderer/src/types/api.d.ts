@@ -28,6 +28,9 @@ declare global {
       }
       categories: {
         list(): Promise<ItemCategory[]>
+        create(data: { name: string }): Promise<ItemCategory>
+        update(id: number, data: { name: string }): Promise<ItemCategory>
+        delete(id: number): Promise<void>
       }
       items: {
         list(): Promise<Item[]>

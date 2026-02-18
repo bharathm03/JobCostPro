@@ -4,7 +4,6 @@ import type { MachineType } from '@/types/models'
 export interface JobFormCostData {
   quantity: number
   rate: number
-  wastePercentage: number
   cooly: number
   machineTypeId: number | null
   machineCost: number
@@ -28,7 +27,7 @@ export function useJobCostCalculator(
   return useMemo(() => {
     const baseAmount = formData.quantity * formData.rate
     const coolyAmount = formData.cooly
-    const wasteAmount = baseAmount * (formData.wastePercentage / 100)
+    const wasteAmount = 0
 
     const machine = formData.machineTypeId
       ? machineTypes.find((m) => m.id === formData.machineTypeId)
@@ -52,7 +51,6 @@ export function useJobCostCalculator(
   }, [
     formData.quantity,
     formData.rate,
-    formData.wastePercentage,
     formData.cooly,
     formData.machineTypeId,
     formData.machineCost,

@@ -12,6 +12,9 @@ interface ItemStore {
   updateItem: (id: number, data: Partial<Omit<Item, 'id'>>) => Promise<void>
   deleteItem: (id: number) => Promise<void>
   getItemsByCategory: (categoryId: number) => Item[]
+  createCategory: (data: { name: string }) => Promise<ItemCategory>
+  updateCategory: (id: number, data: { name: string }) => Promise<void>
+  deleteCategory: (id: number) => Promise<void>
 }
 
 export const useItemStore = create<ItemStore>((set, get) => ({
@@ -51,5 +54,18 @@ export const useItemStore = create<ItemStore>((set, get) => ({
   },
   getItemsByCategory: (categoryId) => {
     return get().items.filter((i) => i.categoryId === categoryId)
+  },
+  createCategory: async (data) => {
+    const category = await window.api.categories.create(data)
+    set({ categories: [...get().categories, category] })
+    return category
+  },
+  updateCategory: async (id, data) => {
+    const updated = await window.api.categories.update(id, data)
+    set({ categories: get().categories.map((c) => (c.id === id ? updated : c)) })
+  },
+  deleteCategory: async (id) => {
+    await window.api.categories.delete(id)
+    set({ categories: get().categories.filter((c) => c.id !== id) })
   }
 }))

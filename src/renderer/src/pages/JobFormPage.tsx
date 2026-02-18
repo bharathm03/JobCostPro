@@ -66,12 +66,10 @@ interface FormState {
   categoryId: number | null
   quantity: number
   rate: number
-  wastePercentage: number
   cooly: number
   machineTypeId: number | null
   machineCustomData: Record<string, unknown>
   machineCost: number
-  machineWastePercentage: number
   machineWasteAmount: number
   notes: string
   status: string
@@ -85,12 +83,10 @@ const DEFAULT_FORM: FormState = {
   categoryId: null,
   quantity: 0,
   rate: 0,
-  wastePercentage: 0,
   cooly: 0,
   machineTypeId: null,
   machineCustomData: {},
   machineCost: 0,
-  machineWastePercentage: 0,
   machineWasteAmount: 0,
   notes: '',
   status: 'pending'
@@ -163,14 +159,12 @@ export function JobFormPage() {
           categoryId: item?.categoryId ?? null,
           quantity: job.quantity,
           rate: job.rate,
-          wastePercentage: job.wastePercentage,
           cooly: job.cooly,
           machineTypeId: job.machineTypeId ?? null,
           machineCustomData: job.machineCustomData
             ? JSON.parse(typeof job.machineCustomData === 'string' ? job.machineCustomData : '{}')
             : {},
           machineCost: job.machineCost ?? 0,
-          machineWastePercentage: job.machineWastePercentage ?? 0,
           machineWasteAmount: job.machineWasteAmount ?? 0,
           notes: job.notes ?? '',
           status: job.status
@@ -198,7 +192,6 @@ export function JobFormPage() {
             ...prev,
             quantity: result.quantity ?? prev.quantity,
             rate: result.rate ?? prev.rate,
-            wastePercentage: result.wastePercentage ?? prev.wastePercentage,
             cooly: result.cooly ?? prev.cooly,
             machineTypeId: result.machineTypeId ?? prev.machineTypeId,
             machineCustomData: result.machineCustomData
@@ -207,7 +200,6 @@ export function JobFormPage() {
                 )
               : prev.machineCustomData,
             machineCost: result.machineCost ?? prev.machineCost,
-            machineWastePercentage: result.machineWastePercentage ?? prev.machineWastePercentage,
             machineWasteAmount: result.machineWasteAmount ?? prev.machineWasteAmount
           }))
           setAutoFillJobNumber(result.jobNumber ?? null)
@@ -225,7 +217,6 @@ export function JobFormPage() {
   const filteredItems = form.categoryId ? getItemsByCategory(form.categoryId) : items
   const selectedItem = items.find((i) => i.id === form.itemId)
   const baseAmount = form.quantity * form.rate
-  const wasteAmount = baseAmount * (form.wastePercentage / 100)
 
   // Selected machine type & schema
   const selectedMachine = machines.find((m) => m.id === form.machineTypeId)
@@ -243,7 +234,6 @@ export function JobFormPage() {
   const costData: JobFormCostData = {
     quantity: form.quantity,
     rate: form.rate,
-    wastePercentage: form.wastePercentage,
     cooly: form.cooly,
     machineTypeId: form.machineTypeId,
     machineCost: form.machineCost,
@@ -308,7 +298,6 @@ export function JobFormPage() {
         machineTypeId: null,
         machineCustomData: {},
         machineCost: 0,
-        machineWastePercentage: 0,
         machineWasteAmount: 0
       }))
     } else {
@@ -317,7 +306,6 @@ export function JobFormPage() {
         machineTypeId: Number(val),
         machineCustomData: {},
         machineCost: 0,
-        machineWastePercentage: 0,
         machineWasteAmount: 0
       }))
     }
@@ -330,14 +318,6 @@ export function JobFormPage() {
     }))
   }
 
-  const handleMachineWastePercentageChange = (wastePercentage: number) => {
-    const machineWasteAmount = form.machineCost * (wastePercentage / 100)
-    setForm((prev) => ({
-      ...prev,
-      machineWastePercentage: wastePercentage,
-      machineWasteAmount: Math.round(machineWasteAmount * 100) / 100
-    }))
-  }
 
   const handleCustomerQuickAdd = async () => {
     if (!newCustomerName.trim()) return
@@ -403,14 +383,12 @@ export function JobFormPage() {
         quantity: form.quantity,
         rate: form.rate,
         amount: baseAmount,
-        wastePercentage: form.wastePercentage,
-        wasteAmount: wasteAmount,
+        wasteAmount: 0,
         cooly: form.cooly,
         totalAmount: costBreakdown.grandTotal,
         machineTypeId: form.machineTypeId,
         machineCustomData: JSON.stringify(form.machineCustomData),
         machineCost: form.machineCost,
-        machineWastePercentage: form.machineWastePercentage,
         machineWasteAmount: form.machineWasteAmount,
         notes: form.notes || null,
         status: form.status
@@ -758,7 +736,7 @@ export function JobFormPage() {
             </div>
           </div>
 
-          {/* Row 4: Cooly | Waste% | Waste Amount */}
+          {/* Row 4: Cooly */}
           <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-3">
             <div className="space-y-1">
               <Label htmlFor="cooly">Cooly (Labor)</Label>
@@ -773,27 +751,6 @@ export function JobFormPage() {
                 onFocus={selectOnFocus}
                 placeholder="0.00"
               />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="wastePercentage">Waste %</Label>
-              <Input
-                id="wastePercentage"
-                type="number"
-                min={0}
-                max={100}
-                step="0.1"
-                value={form.wastePercentage || ''}
-                onChange={(e) => updateForm('wastePercentage', Number(e.target.value) || 0)}
-                onKeyDown={handleFieldKeyDown}
-                onFocus={selectOnFocus}
-                placeholder="0"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Waste Amount</Label>
-              <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm font-medium">
-                {formatINR(wasteAmount)}
-              </div>
             </div>
           </div>
         </CardContent>
@@ -863,29 +820,17 @@ export function JobFormPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="machine-waste-pct">Waste %</Label>
+                  <Label htmlFor="machine-waste-amount">Waste Amount</Label>
                   <Input
-                    id="machine-waste-pct"
+                    id="machine-waste-amount"
                     type="number"
                     min={0}
-                    max={100}
-                    value={form.machineWastePercentage || ''}
-                    onChange={(e) =>
-                      handleMachineWastePercentageChange(Number(e.target.value) || 0)
-                    }
+                    step="0.01"
+                    value={form.machineWasteAmount || ''}
+                    onChange={(e) => updateForm('machineWasteAmount', Number(e.target.value) || 0)}
                     onKeyDown={handleFieldKeyDown}
                     onFocus={selectOnFocus}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Waste Amount</Label>
-                  <Input
-                    type="number"
-                    value={form.machineWasteAmount.toFixed(2)}
-                    readOnly
-                    disabled
-                    className="bg-muted"
+                    placeholder="0.00"
                   />
                 </div>
               </div>

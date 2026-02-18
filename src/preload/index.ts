@@ -15,7 +15,10 @@ const api = {
     delete: (id) => ipcRenderer.invoke('employees:delete', id)
   },
   categories: {
-    list: () => ipcRenderer.invoke('categories:list')
+    list: () => ipcRenderer.invoke('categories:list'),
+    create: (data) => ipcRenderer.invoke('categories:create', data),
+    update: (id, data) => ipcRenderer.invoke('categories:update', id, data),
+    delete: (id) => ipcRenderer.invoke('categories:delete', id)
   },
   items: {
     list: () => ipcRenderer.invoke('items:list'),
